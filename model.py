@@ -6,9 +6,9 @@ import matplotlib.pyplot as plt
 import os, time, itertools, imageio, pickle
 def load_data():
     f=h5py.File("one.h5","r")
-    img=f['img']
+    origin_img=f['img']
     text=f['stvecs']
-    img=np.reshape(img,(256,256,3),np.float32)
+    img=np.reshape(origin_img,(256,256,3),np.float32)
     img=(img-np.ones(img.shape)*128)/256
     img4D=img[np.newaxis,:,:,:]
     for i in range(200):
@@ -18,7 +18,7 @@ def load_data():
             imgData=np.concatenate((imgData,img4D),axis=0)
             #print(imgData.shape)
     print("Data generation finished..." )
-    return imgData,text
+    return imgData,text,origin_img
                 
 def lrelu(x, th=0.2):
     return tf.maximum(th * x, x)
@@ -26,12 +26,13 @@ def lrelu(x, th=0.2):
 def generator(x, isTrain=True, reuse=False):
     print("generator")
     with tf.variable_scope('generator', reuse=reuse):
-        kernel = tf.random_normal(shape=[4,4,3,1])
         print(x)
+       
         # 1st hidden layer
-        conv1 =  tf.layers.conv2d_transpose(x, 1024, [4, 4], strides=(1, 1), padding='valid')
+        conv1 =  tf.layers.conv2d_transpose(x, 128, [4, 4], strides=(1, 1), padding='same')
         lrelu1 = lrelu(tf.layers.batch_normalization(conv1, training=isTrain), 0.2)
         print(conv1)
+        """
         # 2nd hidden layer
         conv2 = tf.layers.conv2d_transpose(lrelu1, 512, [4, 4], strides=(2, 2), padding='same')
         lrelu2 = lrelu(tf.layers.batch_normalization(conv2, training=isTrain), 0.2)
@@ -40,12 +41,14 @@ def generator(x, isTrain=True, reuse=False):
         conv3 = tf.layers.conv2d_transpose(lrelu2, 256, [4, 4], strides=(2, 2), padding='same')
         lrelu3 = lrelu(tf.layers.batch_normalization(conv3, training=isTrain), 0.2)
         print(conv3)
+        
         # 4th hidden layer
         conv4 = tf.layers.conv2d_transpose(lrelu3, 128, [4, 4], strides=(2, 2), padding='same')
         lrelu4 = lrelu(tf.layers.batch_normalization(conv4, training=isTrain), 0.2)
         print(conv4)
+        """
          # 5th hidden layer
-        conv5 = tf.layers.conv2d_transpose(lrelu4, 64, [4,4], strides=(2, 2), padding='same')
+        conv5 = tf.layers.conv2d_transpose(lrelu1, 64, [4,4], strides=(2, 2), padding='same')
         lrelu5 = lrelu(tf.layers.batch_normalization(conv5, training=isTrain), 0.2)
         print(conv5)
         # 6th hidden layer
@@ -61,60 +64,85 @@ def generator(x, isTrain=True, reuse=False):
 def discriminator(x, isTrain=True, reuse=False):
     print("discriminator")
     with tf.variable_scope('discriminator', reuse=reuse):
-        # 1st hidden layer
+        # 1st convolution + max_pooling
         filter1 = tf.get_variable('weight1', [4, 4, 3, 32], initializer=tf.truncated_normal_initializer(stddev=5e-2, dtype=tf.float32), dtype=tf.float32)
+        bias1 = tf.get_variable('bias1', [32], initializer=tf.constant_initializer(0))
         conv1 = tf.nn.conv2d(x, filter1, strides=[1, 2, 2, 1], padding='SAME')  
-        #tf.layers.conv2d(x, 32, [4,4], strides=(2, 2), padding='same')
-        lrelu1 = lrelu(conv1, 0.2)
+        print(conv1)
+        conv1 = conv1 + bias1
+        conv1 = tf.nn.relu(conv1)
+        #conv1 = tf.nn.avg_pool(conv1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
         print(conv1)
 
-        # 2nd hidden layer
+        # 2nd convolution + max_pooling
         filter2 = tf.get_variable('weight2', [4, 4, 32, 64], initializer=tf.truncated_normal_initializer(stddev=5e-2, dtype=tf.float32), dtype=tf.float32)
-        conv2 =tf.nn.conv2d(lrelu1, filter2, strides=[1, 2, 2, 1], padding='SAME')   
-        #tf.layers.conv2d(lrelu1, 64, [4,4], strides=(2, 2), padding='same')
-        lrelu2 = lrelu(tf.layers.batch_normalization(conv2, training=isTrain), 0.2)
+        bias2 = tf.get_variable('bias2', [64], initializer=tf.constant_initializer(0))
+        conv2 =tf.nn.conv2d(conv1, filter2, strides=[1, 2, 2, 1], padding='SAME')
+        print(conv2)
+        conv2 = conv2 + bias2
+        conv2 = tf.nn.relu(conv2)
+        #conv2 = tf.nn.avg_pool(conv2, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
         print(conv2)
 
-        # 3rd hidden layer
+        # 3rd convolution + max_pooling
         filter3 = tf.get_variable('weight3', [4, 4, 64, 128], initializer=tf.truncated_normal_initializer(stddev=5e-2, dtype=tf.float32), dtype=tf.float32)
-        conv3 =tf.nn.conv2d(lrelu2, filter3, strides=[1, 2, 2, 1], padding='SAME')    
-        #tf.layers.conv2d(lrelu2, 128, [4,4], strides=(2, 2), padding='same')
-        lrelu3 = lrelu(tf.layers.batch_normalization(conv3, training=isTrain), 0.2)
+        bias3 = tf.get_variable('bias3',[128],initializer=tf.constant_initializer(0))
+        conv3 =tf.nn.conv2d(conv2, filter3, strides=[1, 2, 2, 1], padding='SAME')
         print(conv3)
-
-        # 4th hidden layer
+        conv3 = conv3 + bias3
+        conv3 = tf.nn.relu(conv3)
+        #conv3 = tf.nn.avg_pool(conv3, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+        print(conv3)
+        """
+        # 4th convolution + max_pooling
         filter4 = tf.get_variable('weight4', [4, 4, 128, 256], initializer=tf.truncated_normal_initializer(stddev=5e-2, dtype=tf.float32), dtype=tf.float32)
-        conv4 = tf.nn.conv2d(lrelu3, filter4, strides=[1, 2, 2, 1], padding='SAME')   
-        #tf.layers.conv2d(lrelu3, 256, [4,4], strides=(2, 2), padding='same')
-        lrelu4 = lrelu(tf.layers.batch_normalization(conv4, training=isTrain), 0.2)
+        bias4 = tf.get_variable('bias4',[256],initializer=tf.constant_initializer(0))
+        conv4 = tf.nn.conv2d(conv3, filter4, strides=[1, 2, 2, 1], padding='SAME')  
+        print(conv4) 
+        conv4 = conv4 + bias4
+        conv4 = tf.nn.relu(conv4)
+        conv4 = tf.nn.avg_pool(conv4, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
         print(conv4)
-
+        
         # 5th hidden layer
         filter5 = tf.get_variable('weight5', [4, 4, 256, 512], initializer=tf.truncated_normal_initializer(stddev=5e-2, dtype=tf.float32), dtype=tf.float32)
-        conv5 = tf.nn.conv2d(lrelu4,filter5, strides=[1, 2, 2, 1], padding='SAME')   
-        #tf.layers.conv2d(lrelu4, 512, [4,4], strides=(2, 2), padding='same')
-        lrelu5 = lrelu(tf.layers.batch_normalization(conv5, training=isTrain), 0.2)
+        bias5 = tf.get_variable('bias5',[512],initializer=tf.constant_initializer(0))
+        conv5 = tf.nn.conv2d(conv4,filter5, strides=[1, 2, 2, 1], padding='SAME')   
+        conv5 = conv5 + bias5
+        conv5 = tf.nn.relu(conv5)
+        conv5 = tf.nn.avg_pool(conv5, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
         print(conv5)
 
         # 6th hidden layer
         filter6 = tf.get_variable('weight6', [4, 4, 512, 1024], initializer=tf.truncated_normal_initializer(stddev=5e-2, dtype=tf.float32), dtype=tf.float32)
-        conv6 = tf.nn.conv2d(lrelu5, filter6, strides=[1, 2, 2, 1], padding='SAME')   
-        #tf.layers.conv2d(lrelu5, 1024, [4,4], strides=(2, 2), padding='same')
-        lrelu6 = lrelu(tf.layers.batch_normalization(conv6, training=isTrain), 0.2)
+        bias6 = tf.get_variable('bias6',[1024],initializer=tf.constant_initializer(0))  
+        conv6 = tf.nn.conv2d(conv5, filter6, strides=[1, 2, 2, 1], padding='SAME')   
+        conv6 = conv6 + bias6
+        conv6 = tf.nn.relu(conv6)
+        conv6 = tf.nn.avg_pool(conv6, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
         print(conv6)
-
+       
         # output layer
         filter7 = tf.get_variable('weight7', [4, 4, 1024, 1], initializer=tf.truncated_normal_initializer(stddev=5e-2, dtype=tf.float32), dtype=tf.float32)
-        conv7 = tf.nn.conv2d(lrelu6, filter7, strides=[1, 1, 1, 1], padding='SAME')   
-        #tf.layers.conv2d(lrelu4, 1, [4,4], strides=(1, 1), padding='valid')
+        bias7 = tf.get_variable('bias7',[1],initializer=tf.constant_initializer(0)) 
+        conv7 = tf.nn.conv2d(conv6, filter7, strides=[1, 1, 1, 1], padding='SAME') 
+        conv7 = conv7 + bias7  
         o = tf.nn.sigmoid(conv7)
         print(conv7)
-        return o, conv7
+        """
+        # output layer
+        filter4 = tf.get_variable('weight4', [4, 4, 128, 1], initializer=tf.truncated_normal_initializer(stddev=5e-2, dtype=tf.float32), dtype=tf.float32)
+        bias4 = tf.get_variable('bias4',[1],initializer=tf.constant_initializer(0)) 
+        conv4 = tf.nn.conv2d(conv3, filter4, strides=[1, 1, 1, 1], padding='SAME') 
+        conv4 = conv4 + bias4  
+        o = tf.nn.sigmoid(conv4)
+        print(conv4)
+        return o, conv4
 
-fixed_z_ = np.random.normal(0, 1, (25, 1, 1, 100))
+fixed_z_ = np.random.normal(0, 1, (25, 32, 32, 100))
 def show_result(num_epoch, show = False, save = False, path = 'result.png'):
     test_images = sess.run(G_z, {z: fixed_z_, isTrain: False})
-
+ 
     size_figure_grid = 5
     fig, ax = plt.subplots(size_figure_grid, size_figure_grid, figsize=(5, 5))
     for i, j in itertools.product(range(size_figure_grid), range(size_figure_grid)):
@@ -125,7 +153,9 @@ def show_result(num_epoch, show = False, save = False, path = 'result.png'):
         i = k // size_figure_grid
         j = k % size_figure_grid
         ax[i, j].cla()
-        ax[i, j].imshow(np.reshape(test_images[k], (256, 256, 3)), cmap='gray')
+        newImg=np.reshape(test_images[k], (256, 256, 3))*256+np.ones((256,256,3))*128
+        newImg=newImg.astype(np.uint8)
+        ax[i, j].imshow(newImg, cmap=None)
 
     label = 'Epoch {0}'.format(num_epoch)
     fig.text(0.5, 0.04, label, ha='center')
@@ -164,14 +194,14 @@ def show_train_hist(hist, show = False, save = False, path = 'Train_hist.png'):
 
 # training parameters
 batch_size = 100
-lr = 0.0002
-train_epoch = 20
+lr = 0.00001
+train_epoch = 1000
 #load recipe data
-imgData,text=load_data()
+imgData,text,origin_img=load_data()
 
 # variables : input
 x = tf.placeholder(tf.float32, shape=(None, 256, 256, 3))
-z = tf.placeholder(tf.float32, shape=(None, 1, 1, 100))
+z = tf.placeholder(tf.float32, shape=(None, 32, 32, 100))
 isTrain = tf.placeholder(dtype=tf.bool)
 
 
@@ -183,10 +213,10 @@ D_real, D_real_logits = discriminator(x, isTrain)
 D_fake, D_fake_logits = discriminator(G_z, isTrain, reuse=True)
 
 # loss for each network
-D_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_real_logits, labels=tf.ones([batch_size, 4, 4, 1])))
-D_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.zeros([batch_size, 4, 4, 1])))
+D_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_real_logits, labels=tf.ones([batch_size, 32, 32, 1])))
+D_loss_fake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.zeros([batch_size, 32, 32, 1])))
 D_loss = D_loss_real + D_loss_fake
-G_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.ones([batch_size, 4, 4, 1])))
+G_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=D_fake_logits, labels=tf.ones([batch_size, 32, 32, 1])))
 
 # trainable variables for each network
 T_vars = tf.trainable_variables()
@@ -228,13 +258,13 @@ for epoch in range(train_epoch):
     for iter in range( len(imgData) // batch_size):
         # update discriminator
         x_ = imgData[iter*batch_size:(iter+1)*batch_size]
-        z_ = np.random.normal(0, 1, (batch_size, 1, 1, 100))
+        z_ = np.random.normal(0, 1, (batch_size, 32, 32, 100))
 
         loss_d_, _ = sess.run([D_loss, D_optim], {x: x_, z: z_, isTrain: True})
         D_losses.append(loss_d_)
 
         # update generator
-        z_ = np.random.normal(0, 1, (batch_size, 1, 1, 100))
+        z_ = np.random.normal(0, 1, (batch_size, 32, 32, 100))
         loss_g_, _ = sess.run([G_loss, G_optim], {z: z_, x: x_, isTrain: True})
         G_losses.append(loss_g_)
 
@@ -242,7 +272,8 @@ for epoch in range(train_epoch):
     per_epoch_ptime = epoch_end_time - epoch_start_time
     print('[%d/%d] - ptime: %.2f loss_d: %.3f, loss_g: %.3f' % ((epoch + 1), train_epoch, per_epoch_ptime, np.mean(D_losses), np.mean(G_losses)))
     fixed_p = root + 'Fixed_results/' + model + str(epoch + 1) + '.png'
-    show_result((epoch + 1), save=True, path=fixed_p)
+    if epoch%100 == 0:
+        show_result((epoch + 100), save=True, path=fixed_p)
     train_hist['D_losses'].append(np.mean(D_losses))
     train_hist['G_losses'].append(np.mean(G_losses))
     train_hist['per_epoch_ptimes'].append(per_epoch_ptime)
