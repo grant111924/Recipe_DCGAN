@@ -8,13 +8,16 @@ import json
 from pprint import pprint
 
 def h5_Open():
-    f = h5py.File('D:/recipe/data.h5','r')   
+    f = h5py.File('/media/windows/recipe/data.h5','r')   
     for key in f.keys():
         if key.find("train")>0:
             print(f[key].name)
             print(f[key].shape)
             #print(f[key].value)
     #print(f['stvecs_train'].value)
+
+    """
+
     image=f['ims_train'][1]
     vecs=f['stvecs_train'][1]
     print(image)
@@ -27,7 +30,7 @@ def h5_Open():
     #x=np.array(f['impos_train'].value)
     #print(np.argwhere(x==2)[0][0])
 
-
+    """
 def json_open(no):
     jsonFiles=["det_ingrs","layer1","layer2"]
     f=open("D:/recipe/"+jsonFiles[no]+".json","r")
